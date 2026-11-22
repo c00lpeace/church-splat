@@ -54,10 +54,32 @@ const viewer = new GaussianSplats3D.Viewer({
 });
 window.__viewer = viewer;
 
-viewer.addSplatScene('./splat.splat', {
-  splatAlphaRemovalThreshold: 5,
-  showLoadingUI: false
-}).then(() => {
+// The full splat file (82.2 MB) exceeds the GitHub API single-blob limit,
+// so it is stored split into 3 parts and reassembled here before loading.
+async function loadSplat() {
+  const partNames = ['./splat.part1', './splat.part2', './splat.part3'];
+  const bufs = [];
+  let total = 0;
+  for (const name of partNames) {
+    const resp = await fetch(name);
+    if (!resp.ok) throw new Error(name + ' ' + resp.status);
+    const buf = await resp.arrayBuffer();
+    bufs.push(buf); total += buf.byteLength;
+    const el = document.getElementById('loading');
+    if (el) el.textContent = '불러오는 중… ' + Math.round(total / total * 33.3 * bufs.length) + '%';
+  }
+  const merged = new Uint8Array(total);
+  let off = 0;
+  for (const b of bufs) { merged.set(new Uint8Array(b), off); off += b.byteLength; }
+  const blobUrl = URL.createObjectURL(new Blob([merged], { type: 'application/octet-stream' }));
+  return viewer.addSplatScene(blobUrl, {
+    format: GaussianSplats3D.SceneFormat.Splat,
+    splatAlphaRemovalThreshold: 5,
+    showLoadingUI: false
+  });
+}
+
+loadSplat().then(() => {
   const fitFov = () => {
     if (!viewer.camera) return;
     const aspect = window.innerWidth / window.innerHeight;

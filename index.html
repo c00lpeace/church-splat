@@ -1,0 +1,93 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<title>Church — Tanks and Temples · Gaussian Splat</title>
+<style>
+  html, body { margin: 0; padding: 0; height: 100%; overflow: hidden; background: #1a1d21; }
+  #app { position: fixed; inset: 0; }
+  canvas { display: block; }
+  #hud {
+    position: fixed; left: 0; right: 0; bottom: 0; padding: 10px 14px calc(10px + env(safe-area-inset-bottom));
+    font-family: -apple-system, "Segoe UI", "Malgun Gothic", sans-serif; color: #aaa;
+    font-size: 13px; text-align: center; pointer-events: none; user-select: none;
+    background: linear-gradient(to top, rgba(26,29,33,.9), rgba(26,29,33,0));
+  }
+  #hud b { color: #eee; font-size: 14px; }
+  #loading {
+    position: fixed; inset: 0; display: flex; align-items: center; justify-content: center;
+    font-family: -apple-system, "Segoe UI", "Malgun Gothic", sans-serif; color: #999; font-size: 15px;
+    background: #1a1d21; z-index: 10; transition: opacity .4s;
+  }
+</style>
+<script type="importmap">
+{
+  "imports": {
+    "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
+    "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/"
+  }
+}
+</script>
+</head>
+<body>
+<div id="app"></div>
+<div id="loading">불러오는 중…</div>
+<div id="hud"><b>Church</b> (Tanks and Temples) · 드래그로 회전 · 스크롤/핀치로 확대·축소</div>
+
+<script type="module">
+import * as GaussianSplats3D from 'https://unpkg.com/@mkkellogg/gaussian-splats-3d@0.4.7/build/gaussian-splats-3d.module.js';
+
+// Framing verified with CPU renders of the final splat:
+// - Scene core (p1-p99) center (0.29, -1.22, -1.45), extent ~6.3 x 6.3 x 12.2 (long axis ~Z).
+// - COLMAP world is tilted ~25 deg; true up estimated from splat height distribution
+//   is (-0.032, -0.906, 0.423). With this up the church side elevation renders level.
+const viewer = new GaussianSplats3D.Viewer({
+  rootElement: document.getElementById('app'),
+  cameraUp: [-0.032, -0.906, 0.423],
+  initialCameraPosition: [13.15, -5.30, 7.95],
+  initialCameraLookAt: [0.29, -1.22, -1.45],
+  sharedMemoryForWorkers: false,
+  gpuAcceleratedSort: false,
+  antialiased: true,
+  logLevel: GaussianSplats3D.LogLevel.None
+});
+window.__viewer = viewer;
+
+viewer.addSplatScene('./splat.splat', {
+  splatAlphaRemovalThreshold: 5,
+  showLoadingUI: false
+}).then(() => {
+  const fitFov = () => {
+    if (!viewer.camera) return;
+    const aspect = window.innerWidth / window.innerHeight;
+    const baseHalf = Math.tan(THREE_DEG2RAD * 25);
+    let vfov = 50;
+    if (aspect < 1) vfov = Math.min(85, 2 * Math.atan(baseHalf / aspect) / THREE_DEG2RAD);
+    viewer.camera.fov = vfov;
+    viewer.camera.updateProjectionMatrix();
+  };
+  const THREE_DEG2RAD = Math.PI / 180;
+  fitFov();
+  window.addEventListener('resize', fitFov);
+  viewer.start();
+  let frames = 0;
+  const tick = () => {
+    frames++;
+    if (frames > 20) {
+      window.__splatReady = true;
+      const el = document.getElementById('loading');
+      if (el) { el.style.opacity = '0'; setTimeout(() => el.remove(), 500); }
+    } else {
+      requestAnimationFrame(tick);
+    }
+  };
+  requestAnimationFrame(tick);
+}).catch((err) => {
+  const el = document.getElementById('loading');
+  if (el) el.textContent = '로딩 실패: ' + err.message;
+  window.__splatError = String(err && err.message || err);
+});
+</script>
+</body>
+</html>
